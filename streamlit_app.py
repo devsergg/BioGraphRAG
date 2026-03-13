@@ -1,13 +1,11 @@
 import streamlit as st
 import requests
 
-# In production (Streamlit Cloud), set the API_BASE secret in the Streamlit
-# Cloud dashboard under Settings → Secrets:
-#   [api]
-#   base_url = "https://your-app.railway.app/api"
+# In production (Streamlit Cloud), add this under Settings → Secrets:
+#   API_BASE = "https://your-app.railway.app/api"
 #
 # Locally, falls back to localhost so development workflow is unchanged.
-API_BASE = st.secrets.get("api", {}).get("base_url", "http://localhost:8000/api")
+API_BASE = st.secrets.get("API_BASE", "http://localhost:8000/api")
 
 st.set_page_config(
     page_title="Biotech GraphRAG Synthesizer",
