@@ -1,0 +1,39 @@
+# Core backend
+fastapi>=0.115.0
+uvicorn[standard]>=0.34.0
+pydantic-settings>=2.11.0
+python-dotenv>=1.0.0
+
+# LangChain ecosystem (latest stable 1.x)
+langchain>=1.2.0
+langchain-core>=1.2.0
+langchain-community>=0.4.0
+langchain-openai>=0.3.0
+langchain-pinecone>=0.2.0
+
+# Neo4j dedicated LangChain integration (replaces langchain-community.graphs)
+langchain-neo4j>=0.3.0
+
+# Evaluation & tracing
+langsmith>=0.3.0
+
+# Vector database
+pinecone>=5.4.0
+
+# Graph database
+neo4j>=5.27.0
+
+# Embeddings & LLM
+openai>=1.65.0
+
+# Reranking (downloads ~80MB model on first use)
+sentence-transformers>=3.4.0
+
+# Frontend
+streamlit>=1.44.0
+
+# HTTP client (used in streamlit_app.py)
+requests>=2.32.0
+
+# Utilities
+tqdm>=4.66.0

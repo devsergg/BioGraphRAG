@@ -1,0 +1,5 @@
+# Minimal requirements for Streamlit Cloud deployment.
+# The FastAPI backend (Railway) uses requirements.txt which includes
+# all heavy dependencies (torch, sentence-transformers, langchain, etc.).
+streamlit>=1.44.0
+requests>=2.32.0

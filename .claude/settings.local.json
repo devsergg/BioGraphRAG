@@ -1,0 +1,23 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(pip show langchain langchain-core langchain-community langchain-openai langchain-pinecone pydantic-settings pinecone sentence-transformers langsmith)",
+      "Bash(python3 -c \"import pinecone; print\\(pinecone.__version__\\)\")",
+      "Bash(python3 -c \"import langchain; print\\(langchain.__version__\\)\")",
+      "Bash(python3 -c \"import pydantic_settings; print\\(pydantic_settings.__version__\\)\")",
+      "Bash(pip show langchain langchain-openai langchain-pinecone langchain-community fastapi uvicorn streamlit pinecone-client sentence-transformers langsmith neo4j)",
+      "Bash(pip3 show pinecone)",
+      "Bash(pip3 show langchain-pinecone)",
+      "Bash(pip3 show neo4j)",
+      "Bash(pip3 list)",
+      "WebFetch(domain:docs.langchain.com)",
+      "Bash(python3.12 --version)",
+      "Bash(python3.13 --version)",
+      "Bash(.venv/bin/pip install -r requirements.txt)",
+      "Bash(.venv/bin/python -c \":*)",
+      "Bash(source .venv/bin/activate)",
+      "Bash(python -c \":*)",
+      "Bash(python scripts/seed_databases.py --help)"
+    ]
+  }
+}
