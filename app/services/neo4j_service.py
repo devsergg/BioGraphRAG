@@ -34,8 +34,46 @@ from __future__ import annotations
 from neo4j import GraphDatabase
 from langchain_neo4j import Neo4jGraph, GraphCypherQAChain
 from langchain_openai import ChatOpenAI
+from langchain_core.prompts import PromptTemplate
 
 from app.config import settings
+
+# ─── Custom Cypher generation prompt ─────────────────────────────────────────
+# The default prompt generates exact name matches ({name: "value"}) which
+# fail because nodes are stored with varied capitalisation and phrasing.
+# This prompt enforces toLower() CONTAINS matching so "chronic pain" will
+# match "Chronic Pain", "Chronic Back Pain Syndrome", etc.
+_CYPHER_GENERATION_TEMPLATE = """You are an expert Neo4j Cypher query writer for a biomedical knowledge graph.
+
+Schema:
+{schema}
+
+STRICT RULES — follow these exactly:
+1. NEVER use exact property matching like {{name: "some value"}}.
+   ALWAYS use case-insensitive partial matching:
+   WHERE toLower(n.name) CONTAINS toLower("some value")
+
+2. When matching multiple entities, apply the CONTAINS rule to each one.
+
+3. Only use node labels and relationship types defined in the schema above.
+
+4. Return only the raw Cypher query — no explanation, no markdown, no apologies.
+
+5. If multiple relationship hops are needed, chain them naturally in the MATCH.
+
+Examples of CORRECT Cypher style:
+  MATCH (d:Disorder) WHERE toLower(d.name) CONTAINS toLower("chronic pain") RETURN d.name
+  MATCH (r:Receptor)-[:EXPRESSED_IN]->(b:BrainRegion) WHERE toLower(b.name) CONTAINS toLower("spinal cord") RETURN r.name, b.name
+  MATCH (d1:Disorder)-[:COMORBID_WITH]->(d2:Disorder) WHERE toLower(d1.name) CONTAINS toLower("pain") RETURN d1.name, d2.name
+
+Question: {question}
+Cypher:"""
+
+_CYPHER_GENERATION_PROMPT = PromptTemplate(
+    input_variables=["schema", "question"],
+    template=_CYPHER_GENERATION_TEMPLATE,
+)
+# ─────────────────────────────────────────────────────────────────────────────
 from app.services.entity_extractor import (
     PaperEntities,
     filter_valid_relationships,
@@ -281,6 +319,7 @@ class Neo4jService:
             self._chain = GraphCypherQAChain.from_llm(
                 llm=llm,
                 graph=self._lc_graph,
+                cypher_prompt=_CYPHER_GENERATION_PROMPT,
                 allow_dangerous_requests=True,
                 return_intermediate_steps=True,  # exposes generated Cypher
                 verbose=False,
