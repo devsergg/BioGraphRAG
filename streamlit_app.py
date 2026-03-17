@@ -156,4 +156,9 @@ if prompt := st.chat_input("Ask about pain mechanisms, receptors, brain regions,
             except requests.exceptions.ConnectionError:
                 st.error("Cannot connect to the API. Make sure FastAPI is running: `uvicorn app.main:app --reload --port 8000`")
             except requests.exceptions.RequestException as e:
-                st.error(f"API error: {str(e)}")
+                detail = ""
+                try:
+                    detail = e.response.json().get("detail", "")
+                except Exception:
+                    pass
+                st.error(f"API error: {str(e)}\n\n**Detail:** {detail}")

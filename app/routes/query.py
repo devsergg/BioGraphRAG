@@ -1,5 +1,9 @@
+import logging
+
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
+
+logger = logging.getLogger(__name__)
 
 from app.services.pinecone_service import init_pinecone, vector_retrieve
 from app.services.neo4j_service import Neo4jService
@@ -114,4 +118,5 @@ async def query_endpoint(request: QueryRequest):
         return QueryResponse(answer=answer, sources=sources, reasoning_trace=reasoning_trace)
 
     except Exception as e:
+        logger.exception("Query pipeline failed")
         raise HTTPException(status_code=500, detail=str(e))
