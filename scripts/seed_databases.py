@@ -1,20 +1,16 @@
 #!/usr/bin/env python3
 """
-Seed script — populates Pinecone and Neo4j with:
-  • peer-reviewed papers  (PubMed, Europe PMC, and/or Semantic Scholar)
-  • clinical trials       (ClinicalTrials.gov)
+Seed script — populates Pinecone and Neo4j with peer-reviewed papers
+from PubMed, Europe PMC, and/or Semantic Scholar.
 
 Steps
 -----
   [0] Clear Neo4j graph + delete/recreate Pinecone index  (skipped with --no-clear)
   [1] Fetch papers from selected sources, deduplicate by PMID
-  [2] Fetch trials from ClinicalTrials.gov
-  [3] Extract biological entities from papers (GPT-4o-mini)
-  [4] Upsert papers to Neo4j
-  [5] Upsert trials to Neo4j
-  [6] Upsert papers to Pinecone
-  [7] Upsert trials to Pinecone
-  [8] Print stats
+  [2] Extract biological entities from papers (GPT-4o-mini)
+  [3] Upsert papers to Neo4j
+  [4] Upsert papers to Pinecone
+  [5] Print stats
 
 Usage
 -----
@@ -43,7 +39,6 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from pinecone import Pinecone
 
 from app.config import settings
-from app.services.data_fetcher import fetch_all_trials
 from app.services.pubmed_fetcher import fetch_pubmed_papers
 from app.services.europepmc_fetcher import fetch_europepmc_papers
 from app.services.semanticscholar_fetcher import fetch_semanticscholar_papers
@@ -52,7 +47,6 @@ from app.services.neo4j_service import Neo4jService
 from app.services.pinecone_service import (
     init_pinecone,
     add_papers_to_pinecone,
-    add_trials_to_pinecone,
 )
 
 # ─── Source registry ──────────────────────────────────────────────────────────
@@ -152,7 +146,7 @@ def fetch_papers_from_sources(
 
 def parse_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Seed Pinecone + Neo4j with papers and clinical trials."
+        description="Seed Pinecone + Neo4j with peer-reviewed papers."
     )
     parser.add_argument(
         "--sources",
@@ -175,11 +169,6 @@ def parse_args() -> argparse.Namespace:
             "without wiping what's already there."
         ),
     )
-    parser.add_argument(
-        "--papers-only",
-        action="store_true",
-        help="Skip trial fetching and trial upserts (useful when trials are already seeded).",
-    )
     return parser.parse_args()
 
 
@@ -188,7 +177,7 @@ def main():
     source_names = [ALL_SOURCES[s][1] for s in args.sources]
 
     print("=" * 60)
-    print("Biotech GraphRAG Synthesizer — Database Seeding (v2)")
+    print("Biotech GraphRAG Synthesizer — Database Seeding")
     print(f"Sources:  {', '.join(source_names)}")
     print(f"Clear DB: {'NO (--no-clear)' if args.no_clear else 'YES'}")
     print("=" * 60)
@@ -197,60 +186,43 @@ def main():
     neo4j = Neo4jService()
 
     if args.no_clear:
-        print("\n[0/7] Skipping database clear (--no-clear).")
+        print("\n[0/4] Skipping database clear (--no-clear).")
         print("  Neo4j and Pinecone will be APPENDED to (MERGE prevents duplicates).")
     else:
-        print("\n[0/7] Clearing databases...")
+        print("\n[0/4] Clearing databases...")
         neo4j.clear_graph()
         reset_pinecone()
 
     # ── [1] Fetch papers ──────────────────────────────────────────────────────
-    print(f"\n[1/7] Fetching papers from: {', '.join(source_names)} × {len(SEARCH_TERMS)} terms...")
+    print(f"\n[1/4] Fetching papers from: {', '.join(source_names)} × {len(SEARCH_TERMS)} terms...")
     papers = fetch_papers_from_sources(args.sources)
     print(f"  Total unique papers fetched this run: {len(papers)}")
     if not papers:
         print("  WARNING: No papers fetched. Check your network / API keys.")
 
-    # ── [2] Fetch trials ──────────────────────────────────────────────────────
-    if args.papers_only:
-        print("\n[2/7] Skipping trial fetch (--papers-only).")
-        trials = []
-    else:
-        print("\n[2/7] Fetching trials from ClinicalTrials.gov...")
-        trials = fetch_all_trials()
-        print(f"  Fetched {len(trials)} unique trials.")
-
-    # ── [3] Extract entities ──────────────────────────────────────────────────
+    # ── [2] Extract entities ──────────────────────────────────────────────────
     if papers:
-        print(f"\n[3/7] Extracting biological entities from {len(papers)} papers (GPT-4o-mini)...")
+        print(f"\n[2/4] Extracting biological entities from {len(papers)} papers (GPT-4o-mini)...")
         print("  ~1 LLM call per paper, batches of 10 with 1.5s pause between batches")
         paper_entities = extract_entities_batch(papers)
         print(f"  Entity extraction complete for {len(paper_entities)} papers.")
     else:
         paper_entities = []
-        print("\n[3/7] No papers to extract entities from — skipping.")
+        print("\n[2/4] No papers to extract entities from — skipping.")
 
-    # ── [4] Upsert papers to Neo4j ────────────────────────────────────────────
+    # ── [3] Upsert papers to Neo4j ────────────────────────────────────────────
     if paper_entities:
-        print(f"\n[4/7] Upserting {len(paper_entities)} papers to Neo4j...")
+        print(f"\n[3/4] Upserting {len(paper_entities)} papers to Neo4j...")
         neo4j.upsert_papers_batch(paper_entities)
         print("  Papers upserted to Neo4j.")
     else:
-        print("\n[4/7] No papers to upsert to Neo4j — skipping.")
-
-    # ── [5] Upsert trials to Neo4j ────────────────────────────────────────────
-    if trials:
-        print(f"\n[5/7] Upserting {len(trials)} trials to Neo4j...")
-        neo4j.upsert_trials_batch(trials)
-        print("  Trials upserted to Neo4j.")
-    else:
-        print("\n[5/7] No trials to upsert to Neo4j — skipping.")
+        print("\n[3/4] No papers to upsert to Neo4j — skipping.")
 
     neo4j_stats = neo4j.get_stats()
     neo4j.close()
 
-    # ── [6] Init Pinecone + upsert papers ─────────────────────────────────────
-    print("\n[6/7] Initializing Pinecone...")
+    # ── [4] Init Pinecone + upsert papers ─────────────────────────────────────
+    print("\n[4/4] Initializing Pinecone...")
     vectorstore = init_pinecone()
     if papers:
         print(f"  Upserting {len(papers)} papers to Pinecone...")
@@ -259,19 +231,10 @@ def main():
     else:
         print("  No papers to upsert to Pinecone — skipping.")
 
-    # ── [7] Upsert trials to Pinecone ─────────────────────────────────────────
-    if trials:
-        print(f"\n[7/7] Upserting {len(trials)} trials to Pinecone...")
-        add_trials_to_pinecone(trials, vectorstore)
-        print("  Trials upserted to Pinecone.")
-    else:
-        print("\n[7/7] No trials to upsert to Pinecone — skipping.")
-
-    # ── [8] Print summary ─────────────────────────────────────────────────────
+    # ── [5] Print summary ─────────────────────────────────────────────────────
     print("\n" + "=" * 60)
     print("Seeding complete!")
     print(f"  Papers ingested this run:  {len(papers)}")
-    print(f"  Trials ingested this run:  {len(trials)}")
     print("\n  Neo4j node counts (cumulative):")
     for label, count in sorted(neo4j_stats.items(), key=lambda x: -x[1]):
         print(f"    {label}: {count}")
@@ -279,7 +242,6 @@ def main():
     print("\nVerification Cypher queries for Neo4j Browser:")
     print("  MATCH (n) RETURN labels(n)[0] AS label, count(n) AS count ORDER BY count DESC")
     print("  MATCH (p:Paper)-[:MENTIONS]->(e) RETURN p.title, labels(e)[0], e.name LIMIT 20")
-    print("  MATCH (t:Trial)-[:INVESTIGATES]->(c:Compound) RETURN t.nct_id, c.name LIMIT 10")
 
     if args.no_clear:
         print("\nTo add remaining sources later:")

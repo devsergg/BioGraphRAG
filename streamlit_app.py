@@ -16,40 +16,28 @@ st.set_page_config(
 st.title("Biotech GraphRAG Synthesizer")
 st.caption(
     "Hybrid RAG for neurological pain research — "
-    "papers (PubMed · EuropePMC · Semantic Scholar) + trials (ClinicalTrials.gov) "
+    "papers (PubMed · EuropePMC · Semantic Scholar) "
     "· Neo4j biological graph · GPT-4o-mini"
 )
 
 
 def render_sources(sources: list[dict]):
-    """Render a list of mixed paper/trial sources."""
+    """Render a list of paper sources."""
     if not sources:
         return
     st.subheader("Sources")
     for src in sources:
-        score = src.get("relevance_score", 0)
-        title = src.get("title", "Untitled")
-        record_type = src.get("record_type", "trial")
-
-        if record_type == "paper":
-            pmid    = src.get("pmid", "")
-            journal = src.get("journal", "")
-            year    = src.get("year", "")
-            source  = src.get("source", "")
-            label   = f"PMID:{pmid}" if pmid else "Paper"
-            st.markdown(
-                f"- 📄 **{label}** — {title}  "
-                f"*({journal}, {year} | {source} | Score: {score:.3f})*"
-            )
-        else:
-            nct_id  = src.get("nct_id", "")
-            phase   = src.get("phase", "")
-            status  = src.get("status", "")
-            label   = nct_id if nct_id else "Trial"
-            st.markdown(
-                f"- 🧪 **{label}** — {title}  "
-                f"*(Phase: {phase} | {status} | Score: {score:.3f})*"
-            )
+        score   = src.get("relevance_score", 0)
+        title   = src.get("title", "Untitled")
+        pmid    = src.get("pmid", "")
+        journal = src.get("journal", "")
+        year    = src.get("year", "")
+        source  = src.get("source", "")
+        label   = f"PMID:{pmid}" if pmid else "Paper"
+        st.markdown(
+            f"- 📄 **{label}** — {title}  "
+            f"*({journal}, {year} | {source} | Score: {score:.3f})*"
+        )
 
 
 def render_reasoning_trace(trace: dict):
@@ -109,7 +97,7 @@ for message in st.session_state.messages:
             render_reasoning_trace(message.get("reasoning_trace", {}))
 
 # Chat input
-if prompt := st.chat_input("Ask about pain mechanisms, receptors, brain regions, or clinical trials..."):
+if prompt := st.chat_input("Ask about pain mechanisms, receptors, brain regions, or analgesic treatments..."):
     # Display user message
     st.session_state.messages.append({"role": "user", "content": prompt})
     with st.chat_message("user"):
@@ -117,7 +105,7 @@ if prompt := st.chat_input("Ask about pain mechanisms, receptors, brain regions,
 
     # Call the API
     with st.chat_message("assistant"):
-        with st.spinner("Searching papers + graph + trials..."):
+        with st.spinner("Searching papers + graph..."):
             try:
                 # Build history: all messages before the current one (which we
                 # just appended), capped at 10 entries (5 turns).  We only

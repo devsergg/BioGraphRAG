@@ -3,22 +3,18 @@ Neo4j service — biological knowledge graph for neurological pain research.
 
 Schema
 ------
-Nodes (9 types):
+Nodes (7 types):
   Paper       — peer-reviewed papers (key: pmid)
-  Trial       — ClinicalTrials.gov entries (key: nct_id)
   BrainRegion — named brain/spinal regions (key: name)
   Receptor    — ion channels & receptors (key: name)
   GeneProtein — genes, proteins, cytokines (key: name)
   Disorder    — pain conditions & comorbidities (key: name)
   Pathway     — biological pathways & mechanisms (key: name)
-  Compound    — drug/compound from trials (key: name)
   Intervention— treatment from papers (key: name)
 
 Relationships:
   (:Paper)-[:MENTIONS]->(BrainRegion|Receptor|GeneProtein|Disorder|Pathway|Intervention)
-  (:Trial)-[:INVESTIGATES]->(:Compound)
-  (:Trial)-[:STUDIES]->(:Disorder)
-  (:Compound|Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES]->(:Receptor|Pathway)
+  (:Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES]->(:Receptor|Pathway)
   (:Receptor|GeneProtein)-[:EXPRESSED_IN]->(:BrainRegion)
   (:Receptor)-[:ENCODED_BY]->(:GeneProtein)
   (:GeneProtein)-[:INVOLVED_IN]->(:Pathway)
@@ -26,8 +22,6 @@ Relationships:
   (:Pathway)-[:UNDERLIES]->(:Disorder)
   (:Disorder)-[:COMORBID_WITH]->(:Disorder)
   (:Intervention)-[:TARGETS]->(:BrainRegion|Receptor)
-
-Dropped from v1: Organization, Condition, SPONSORS_TRIAL, RESEARCHES, STUDIES_CONDITION
 """
 from __future__ import annotations
 
@@ -91,13 +85,11 @@ _MENTION_LABELS: dict[str, str] = {
 
 _CONSTRAINTS = [
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Paper)        REQUIRE n.pmid     IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Trial)        REQUIRE n.nct_id   IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:BrainRegion)  REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Receptor)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:GeneProtein)  REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Disorder)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Pathway)      REQUIRE n.name     IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Compound)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Intervention) REQUIRE n.name     IS UNIQUE",
 ]
 
@@ -222,75 +214,6 @@ class Neo4jService:
             self.upsert_paper_entities(paper, entities)
             if i % 50 == 0 or i == total:
                 print(f"  Neo4j papers: {i}/{total} upserted")
-
-    # ─── Trial upsert ─────────────────────────────────────────────────────────
-
-    def upsert_trial(self, trial: dict):
-        """Merge a Trial node linked to Compound and Disorder nodes."""
-        nct_id = trial.get("nct_id")
-        if not nct_id:
-            return
-
-        with self.driver.session() as session:
-            # Core Trial node
-            session.run(
-                """
-                MERGE (t:Trial {nct_id: $nct_id})
-                SET t.title       = $title,
-                    t.phase       = $phase,
-                    t.status      = $status,
-                    t.description = $description
-                """,
-                nct_id=nct_id,
-                title=trial.get("title", ""),
-                phase=", ".join(trial.get("phase", [])),
-                status=trial.get("status", ""),
-                description=trial.get("description", "")[:2000],
-            )
-
-            # (:Trial)-[:INVESTIGATES]->(:Compound)
-            interventions = trial.get("interventions", [])
-            if isinstance(interventions, str):
-                interventions = [interventions]
-            for compound in interventions[:10]:
-                compound = compound.strip()
-                if compound:
-                    session.run(
-                        """
-                        MERGE (c:Compound {name: $name})
-                        WITH c
-                        MATCH (t:Trial {nct_id: $nct_id})
-                        MERGE (t)-[:INVESTIGATES]->(c)
-                        """,
-                        name=compound,
-                        nct_id=nct_id,
-                    )
-
-            # (:Trial)-[:STUDIES]->(:Disorder)
-            conditions = trial.get("conditions", [])
-            if isinstance(conditions, str):
-                conditions = [conditions]
-            for condition in conditions[:10]:
-                condition = condition.strip()
-                if condition:
-                    session.run(
-                        """
-                        MERGE (d:Disorder {name: $name})
-                        WITH d
-                        MATCH (t:Trial {nct_id: $nct_id})
-                        MERGE (t)-[:STUDIES]->(d)
-                        """,
-                        name=condition,
-                        nct_id=nct_id,
-                    )
-
-    def upsert_trials_batch(self, trials: list[dict]):
-        """Upsert a list of trial dicts."""
-        total = len(trials)
-        for i, trial in enumerate(trials, 1):
-            self.upsert_trial(trial)
-            if i % 50 == 0 or i == total:
-                print(f"  Neo4j trials: {i}/{total} upserted")
 
     # ─── Graph query (Cypher QA) ──────────────────────────────────────────────
 
