@@ -39,32 +39,47 @@ from app.config import settings
 # match "Chronic Pain", "Chronic Back Pain Syndrome", etc.
 _CYPHER_GENERATION_TEMPLATE = """You are an expert Neo4j Cypher query writer for a biomedical knowledge graph.
 
-Schema:
-{schema}
+VALID RELATIONSHIP PATTERNS — only these (source)-[rel]->(target) combinations exist.
+Do NOT invent patterns outside this list:
 
-STRICT RULES — follow these exactly:
-1. NEVER use exact property matching like {{name: "some value"}}.
-   ALWAYS use case-insensitive partial matching:
-   WHERE toLower(n.name) CONTAINS toLower("some value")
+  (:Paper)-[:MENTIONS]->(BrainRegion|Receptor|GeneProtein|Disorder|Pathway|Intervention)
+  (:Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES|TARGETS]->(Receptor|Pathway|BrainRegion)
+  (:Receptor)-[:EXPRESSED_IN]->(BrainRegion)
+  (:GeneProtein)-[:EXPRESSED_IN]->(BrainRegion)
+  (:Receptor)-[:ENCODED_BY]->(GeneProtein)
+  (:GeneProtein)-[:INVOLVED_IN]->(Pathway)
+  (:Pathway)-[:ACTIVE_IN]->(BrainRegion)
+  (:Pathway)-[:UNDERLIES]->(Disorder)
+  (:Disorder)-[:COMORBID_WITH]->(Disorder)
+  (:Intervention)-[:TARGETS]->(BrainRegion|Receptor)
 
-2. When matching multiple entities, apply the CONTAINS rule to each one.
+NODE LABELS and their meaning:
+  BrainRegion  — brain/spinal regions (e.g. "Dorsal Horn", "Periaqueductal Gray")
+  Receptor     — ion channels, receptors (e.g. "Nav1.7", "NMDA Receptor", "TRPV1")
+  GeneProtein  — genes, proteins, cytokines (e.g. "BDNF", "TNF-alpha", "Substance P")
+  Disorder     — pain conditions (e.g. "Neuropathic Pain", "Fibromyalgia")
+  Pathway      — biological mechanisms (e.g. "Descending Pain Modulation", "Neuroinflammation")
+  Intervention — drugs, treatments, devices (e.g. "Ketamine", "Gabapentin", "Spinal Cord Stimulation")
 
-3. Only use node labels and relationship types defined in the schema above.
+STRICT RULES:
+1. NEVER use exact property matching like {{name: "value"}}.
+   ALWAYS use: WHERE toLower(n.name) CONTAINS toLower("value")
+2. ONLY use the relationship patterns listed above — never invent new ones.
+3. Return only the raw Cypher query — no explanation, no markdown.
+4. For multi-hop queries, chain patterns from the list above.
 
-4. Return only the raw Cypher query — no explanation, no markdown, no apologies.
-
-5. If multiple relationship hops are needed, chain them naturally in the MATCH.
-
-Examples of CORRECT Cypher style:
-  MATCH (d:Disorder) WHERE toLower(d.name) CONTAINS toLower("chronic pain") RETURN d.name
-  MATCH (r:Receptor)-[:EXPRESSED_IN]->(b:BrainRegion) WHERE toLower(b.name) CONTAINS toLower("spinal cord") RETURN r.name, b.name
-  MATCH (d1:Disorder)-[:COMORBID_WITH]->(d2:Disorder) WHERE toLower(d1.name) CONTAINS toLower("pain") RETURN d1.name, d2.name
+Examples:
+  MATCH (p:Pathway)-[:ACTIVE_IN]->(b:BrainRegion) WHERE toLower(p.name) CONTAINS toLower("descending pain") RETURN p.name, b.name
+  MATCH (i:Intervention)-[:INHIBITS|MODULATES]->(r:Receptor) WHERE toLower(i.name) CONTAINS toLower("ketamine") RETURN i.name, r.name
+  MATCH (p:Pathway)-[:UNDERLIES]->(d:Disorder) WHERE toLower(d.name) CONTAINS toLower("neuropathic") RETURN p.name, d.name
+  MATCH (r:Receptor)-[:EXPRESSED_IN]->(b:BrainRegion) WHERE toLower(r.name) CONTAINS toLower("nav1.7") RETURN r.name, b.name
+  MATCH (g:GeneProtein)-[:INVOLVED_IN]->(p:Pathway)-[:UNDERLIES]->(d:Disorder) WHERE toLower(d.name) CONTAINS toLower("chronic pain") RETURN g.name, p.name
 
 Question: {question}
 Cypher:"""
 
 _CYPHER_GENERATION_PROMPT = PromptTemplate(
-    input_variables=["schema", "question"],
+    input_variables=["question"],
     template=_CYPHER_GENERATION_TEMPLATE,
 )
 # ─────────────────────────────────────────────────────────────────────────────
