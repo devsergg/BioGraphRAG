@@ -18,7 +18,7 @@ from app.config import settings
 # These must stay in sync with neo4j_service.py
 VALID_NODE_LABELS = {
     "BrainRegion", "Receptor", "GeneProtein", "Disorder",
-    "Pathway", "Intervention", "Compound",
+    "Pathway", "Intervention",
 }
 VALID_RELATIONS = {
     "BINDS_TO", "INHIBITS", "ACTIVATES", "MODULATES",
@@ -57,9 +57,9 @@ _LABEL_ALIASES: dict[str, str] = {
     "mechanism":     "Pathway",
     "signaling pathway": "Pathway",
     "cascade":       "Pathway",
-    # Intervention/Compound variations
-    "drug":          "Compound",
-    "medication":    "Compound",
+    # Intervention variations
+    "drug":          "Intervention",
+    "medication":    "Intervention",
     "treatment":     "Intervention",
     "therapy":       "Intervention",
     "procedure":     "Intervention",

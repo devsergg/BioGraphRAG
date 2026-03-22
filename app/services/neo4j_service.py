@@ -3,22 +3,18 @@ Neo4j service — biological knowledge graph for neurological pain research.
 
 Schema
 ------
-Nodes (9 types):
+Nodes (7 types):
   Paper       — peer-reviewed papers (key: pmid)
-  Trial       — ClinicalTrials.gov entries (key: nct_id)
   BrainRegion — named brain/spinal regions (key: name)
   Receptor    — ion channels & receptors (key: name)
   GeneProtein — genes, proteins, cytokines (key: name)
   Disorder    — pain conditions & comorbidities (key: name)
   Pathway     — biological pathways & mechanisms (key: name)
-  Compound    — drug/compound from trials (key: name)
   Intervention— treatment from papers (key: name)
 
 Relationships:
   (:Paper)-[:MENTIONS]->(BrainRegion|Receptor|GeneProtein|Disorder|Pathway|Intervention)
-  (:Trial)-[:INVESTIGATES]->(:Compound)
-  (:Trial)-[:STUDIES]->(:Disorder)
-  (:Compound|Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES]->(:Receptor|Pathway)
+  (:Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES]->(:Receptor|Pathway)
   (:Receptor|GeneProtein)-[:EXPRESSED_IN]->(:BrainRegion)
   (:Receptor)-[:ENCODED_BY]->(:GeneProtein)
   (:GeneProtein)-[:INVOLVED_IN]->(:Pathway)
@@ -26,8 +22,6 @@ Relationships:
   (:Pathway)-[:UNDERLIES]->(:Disorder)
   (:Disorder)-[:COMORBID_WITH]->(:Disorder)
   (:Intervention)-[:TARGETS]->(:BrainRegion|Receptor)
-
-Dropped from v1: Organization, Condition, SPONSORS_TRIAL, RESEARCHES, STUDIES_CONDITION
 """
 from __future__ import annotations
 
@@ -45,32 +39,47 @@ from app.config import settings
 # match "Chronic Pain", "Chronic Back Pain Syndrome", etc.
 _CYPHER_GENERATION_TEMPLATE = """You are an expert Neo4j Cypher query writer for a biomedical knowledge graph.
 
-Schema:
-{schema}
+VALID RELATIONSHIP PATTERNS — only these (source)-[rel]->(target) combinations exist.
+Do NOT invent patterns outside this list:
 
-STRICT RULES — follow these exactly:
-1. NEVER use exact property matching like {{name: "some value"}}.
-   ALWAYS use case-insensitive partial matching:
-   WHERE toLower(n.name) CONTAINS toLower("some value")
+  (:Paper)-[:MENTIONS]->(BrainRegion|Receptor|GeneProtein|Disorder|Pathway|Intervention)
+  (:Intervention)-[:BINDS_TO|INHIBITS|ACTIVATES|MODULATES|TARGETS]->(Receptor|Pathway|BrainRegion)
+  (:Receptor)-[:EXPRESSED_IN]->(BrainRegion)
+  (:GeneProtein)-[:EXPRESSED_IN]->(BrainRegion)
+  (:Receptor)-[:ENCODED_BY]->(GeneProtein)
+  (:GeneProtein)-[:INVOLVED_IN]->(Pathway)
+  (:Pathway)-[:ACTIVE_IN]->(BrainRegion)
+  (:Pathway)-[:UNDERLIES]->(Disorder)
+  (:Disorder)-[:COMORBID_WITH]->(Disorder)
+  (:Intervention)-[:TARGETS]->(BrainRegion|Receptor)
 
-2. When matching multiple entities, apply the CONTAINS rule to each one.
+NODE LABELS and their meaning:
+  BrainRegion  — brain/spinal regions (e.g. "Dorsal Horn", "Periaqueductal Gray")
+  Receptor     — ion channels, receptors (e.g. "Nav1.7", "NMDA Receptor", "TRPV1")
+  GeneProtein  — genes, proteins, cytokines (e.g. "BDNF", "TNF-alpha", "Substance P")
+  Disorder     — pain conditions (e.g. "Neuropathic Pain", "Fibromyalgia")
+  Pathway      — biological mechanisms (e.g. "Descending Pain Modulation", "Neuroinflammation")
+  Intervention — drugs, treatments, devices (e.g. "Ketamine", "Gabapentin", "Spinal Cord Stimulation")
 
-3. Only use node labels and relationship types defined in the schema above.
+STRICT RULES:
+1. NEVER use exact property matching like {{name: "value"}}.
+   ALWAYS use: WHERE toLower(n.name) CONTAINS toLower("value")
+2. ONLY use the relationship patterns listed above — never invent new ones.
+3. Return only the raw Cypher query — no explanation, no markdown.
+4. For multi-hop queries, chain patterns from the list above.
 
-4. Return only the raw Cypher query — no explanation, no markdown, no apologies.
-
-5. If multiple relationship hops are needed, chain them naturally in the MATCH.
-
-Examples of CORRECT Cypher style:
-  MATCH (d:Disorder) WHERE toLower(d.name) CONTAINS toLower("chronic pain") RETURN d.name
-  MATCH (r:Receptor)-[:EXPRESSED_IN]->(b:BrainRegion) WHERE toLower(b.name) CONTAINS toLower("spinal cord") RETURN r.name, b.name
-  MATCH (d1:Disorder)-[:COMORBID_WITH]->(d2:Disorder) WHERE toLower(d1.name) CONTAINS toLower("pain") RETURN d1.name, d2.name
+Examples:
+  MATCH (p:Pathway)-[:ACTIVE_IN]->(b:BrainRegion) WHERE toLower(p.name) CONTAINS toLower("descending pain") RETURN p.name, b.name
+  MATCH (i:Intervention)-[:INHIBITS|MODULATES]->(r:Receptor) WHERE toLower(i.name) CONTAINS toLower("ketamine") RETURN i.name, r.name
+  MATCH (p:Pathway)-[:UNDERLIES]->(d:Disorder) WHERE toLower(d.name) CONTAINS toLower("neuropathic") RETURN p.name, d.name
+  MATCH (r:Receptor)-[:EXPRESSED_IN]->(b:BrainRegion) WHERE toLower(r.name) CONTAINS toLower("nav1.7") RETURN r.name, b.name
+  MATCH (g:GeneProtein)-[:INVOLVED_IN]->(p:Pathway)-[:UNDERLIES]->(d:Disorder) WHERE toLower(d.name) CONTAINS toLower("chronic pain") RETURN g.name, p.name
 
 Question: {question}
 Cypher:"""
 
 _CYPHER_GENERATION_PROMPT = PromptTemplate(
-    input_variables=["schema", "question"],
+    input_variables=["question"],
     template=_CYPHER_GENERATION_TEMPLATE,
 )
 # ─────────────────────────────────────────────────────────────────────────────
@@ -91,13 +100,11 @@ _MENTION_LABELS: dict[str, str] = {
 
 _CONSTRAINTS = [
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Paper)        REQUIRE n.pmid     IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Trial)        REQUIRE n.nct_id   IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:BrainRegion)  REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Receptor)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:GeneProtein)  REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Disorder)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Pathway)      REQUIRE n.name     IS UNIQUE",
-    "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Compound)     REQUIRE n.name     IS UNIQUE",
     "CREATE CONSTRAINT IF NOT EXISTS FOR (n:Intervention) REQUIRE n.name     IS UNIQUE",
 ]
 
@@ -222,75 +229,6 @@ class Neo4jService:
             self.upsert_paper_entities(paper, entities)
             if i % 50 == 0 or i == total:
                 print(f"  Neo4j papers: {i}/{total} upserted")
-
-    # ─── Trial upsert ─────────────────────────────────────────────────────────
-
-    def upsert_trial(self, trial: dict):
-        """Merge a Trial node linked to Compound and Disorder nodes."""
-        nct_id = trial.get("nct_id")
-        if not nct_id:
-            return
-
-        with self.driver.session() as session:
-            # Core Trial node
-            session.run(
-                """
-                MERGE (t:Trial {nct_id: $nct_id})
-                SET t.title       = $title,
-                    t.phase       = $phase,
-                    t.status      = $status,
-                    t.description = $description
-                """,
-                nct_id=nct_id,
-                title=trial.get("title", ""),
-                phase=", ".join(trial.get("phase", [])),
-                status=trial.get("status", ""),
-                description=trial.get("description", "")[:2000],
-            )
-
-            # (:Trial)-[:INVESTIGATES]->(:Compound)
-            interventions = trial.get("interventions", [])
-            if isinstance(interventions, str):
-                interventions = [interventions]
-            for compound in interventions[:10]:
-                compound = compound.strip()
-                if compound:
-                    session.run(
-                        """
-                        MERGE (c:Compound {name: $name})
-                        WITH c
-                        MATCH (t:Trial {nct_id: $nct_id})
-                        MERGE (t)-[:INVESTIGATES]->(c)
-                        """,
-                        name=compound,
-                        nct_id=nct_id,
-                    )
-
-            # (:Trial)-[:STUDIES]->(:Disorder)
-            conditions = trial.get("conditions", [])
-            if isinstance(conditions, str):
-                conditions = [conditions]
-            for condition in conditions[:10]:
-                condition = condition.strip()
-                if condition:
-                    session.run(
-                        """
-                        MERGE (d:Disorder {name: $name})
-                        WITH d
-                        MATCH (t:Trial {nct_id: $nct_id})
-                        MERGE (t)-[:STUDIES]->(d)
-                        """,
-                        name=condition,
-                        nct_id=nct_id,
-                    )
-
-    def upsert_trials_batch(self, trials: list[dict]):
-        """Upsert a list of trial dicts."""
-        total = len(trials)
-        for i, trial in enumerate(trials, 1):
-            self.upsert_trial(trial)
-            if i % 50 == 0 or i == total:
-                print(f"  Neo4j trials: {i}/{total} upserted")
 
     # ─── Graph query (Cypher QA) ──────────────────────────────────────────────
 

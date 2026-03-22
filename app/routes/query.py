@@ -91,36 +91,20 @@ async def query_endpoint(request: QueryRequest):
         )
 
         # --- Build response ---
-        # Sources can be trials (record_type="trial") or papers (record_type="paper")
         sources = []
         for r in reranked:
             meta = r["metadata"]
-            record_type = meta.get("record_type", "trial")
-
-            if record_type == "paper":
-                sources.append({
-                    "record_type":     "paper",
-                    "pmid":            meta.get("pmid", ""),
-                    "title":           meta.get("title", ""),
-                    "journal":         meta.get("journal", ""),
-                    "year":            meta.get("year", ""),
-                    "source":          meta.get("source", ""),
-                    "doi":             meta.get("doi", ""),
-                    "relevance_score": r["score"],
-                    "content_preview": r["content"][:300],
-                })
-            else:
-                sources.append({
-                    "record_type":     "trial",
-                    "nct_id":          meta.get("nct_id", ""),
-                    "title":           meta.get("title", ""),
-                    "sponsor":         meta.get("sponsor", ""),
-                    "phase":           meta.get("phase", ""),
-                    "status":          meta.get("status", ""),
-                    "compound":        meta.get("search_compound", ""),
-                    "relevance_score": r["score"],
-                    "content_preview": r["content"][:300],
-                })
+            sources.append({
+                "record_type":     "paper",
+                "pmid":            meta.get("pmid", ""),
+                "title":           meta.get("title", ""),
+                "journal":         meta.get("journal", ""),
+                "year":            meta.get("year", ""),
+                "source":          meta.get("source", ""),
+                "doi":             meta.get("doi", ""),
+                "relevance_score": r["score"],
+                "content_preview": r["content"][:300],
+            })
 
         reasoning_trace = {
             "vector_search": {
